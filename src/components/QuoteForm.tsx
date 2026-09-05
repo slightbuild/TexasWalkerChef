@@ -34,6 +34,7 @@ type FormState = {
   guestCount: string;
   serviceType: (typeof serviceTypes)[number] | '';
   specialRequests: string;
+  menuNotes: string;
 };
 
 const empty: FormState = {
@@ -44,6 +45,7 @@ const empty: FormState = {
   guestCount: '',
   serviceType: '',
   specialRequests: '',
+  menuNotes: '',
 };
 
 export function QuoteForm() {
@@ -56,8 +58,18 @@ export function QuoteForm() {
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
+  const isFullService = form.serviceType === 'Full-Service Catering';
+  const showsMenu = form.serviceType === 'Pickup' || form.serviceType === 'Drop-Off Catering';
+
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setServiceType = (type: (typeof serviceTypes)[number]) => {
+    update('serviceType', type);
+    if (type === 'Full-Service Catering') {
+      setSelections([]);
+    }
   };
 
   const onSubmit = async () => {
@@ -73,21 +85,31 @@ export function QuoteForm() {
       setError('Please enter a 10-digit phone number.');
       return;
     }
+    if (!form.serviceType) {
+      setError('Please choose a service type.');
+      return;
+    }
     const dateError = validateEventDate(form.eventDate);
     if (dateError) {
       setError(dateError);
       return;
     }
-    if (selections.length === 0) {
+    if (isFullService && !form.menuNotes.trim()) {
+      setError('Please tell us which meats and sides you’d like.');
+      return;
+    }
+    if (showsMenu && selections.length === 0) {
       setError('Please add at least one menu item.');
       return;
     }
-    const incompletePackage = selections.find((selection) => {
-      const item = quoteMenuItems.find((entry) => entry.id === selection.id);
-      return item
-        ? !packageChoicesComplete(item, selection.meats, selection.sides)
-        : false;
-    });
+    const incompletePackage = showsMenu
+      ? selections.find((selection) => {
+          const item = quoteMenuItems.find((entry) => entry.id === selection.id);
+          return item
+            ? !packageChoicesComplete(item, selection.meats, selection.sides)
+            : false;
+        })
+      : undefined;
     if (incompletePackage) {
       const item = quoteMenuItems.find((entry) => entry.id === incompletePackage.id);
       setError(
@@ -95,7 +117,7 @@ export function QuoteForm() {
       );
       return;
     }
-    const hasPackage = selections.some((selection) =>
+    const hasPackage = showsMenu && selections.some((selection) =>
       quoteMenuItems.find((entry) => entry.id === selection.id)?.packageCounts
     );
     const guests = Number.parseInt(form.guestCount, 10) || 0;
@@ -114,7 +136,7 @@ export function QuoteForm() {
       return;
     }
 
-    const lines = selectionsToLines(selections, form.guestCount);
+    const lines = showsMenu ? selectionsToLines(selections, form.guestCount) : [];
     const estimatedTotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
 
     setError('');
@@ -138,6 +160,7 @@ export function QuoteForm() {
         })),
         estimatedTotal,
         specialRequests: form.specialRequests.trim(),
+        menuNotes: form.menuNotes.trim(),
         captchaToken,
       });
       setSubmitted(true);
@@ -192,6 +215,23 @@ export function QuoteForm() {
         style={styles.honeypot}
         {...(Platform.OS === 'web' ? ({ tabIndex: -1 } as object) : null)}
       />
+      <Text style={styles.label}>Service Type *</Text>
+      <View style={styles.chips}>
+        {serviceTypes.map((type) => {
+          const active = form.serviceType === type;
+          return (
+            <Pressable
+              key={type}
+              onPress={() => setServiceType(type)}
+              style={[styles.chip, active && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                {type}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
       <Field label="Name *" value={form.name} onChangeText={(v) => update('name', v)} />
       <View style={styles.row}>
         <Field
@@ -228,42 +268,47 @@ export function QuoteForm() {
           value={form.guestCount}
           onChangeText={(v) => update('guestCount', v.replace(/\D/g, ''))}
           keyboardType="number-pad"
-          hint="Required for catering packages. 10–24 guests use the higher per-person rate; 25+ guests use volume pricing."
+          hint={
+            showsMenu
+              ? 'Required for catering packages. 10–24 guests use the higher per-person rate; 25+ guests use volume pricing.'
+              : 'How many people you’re planning to serve.'
+          }
           style={styles.half}
         />
       </View>
 
-      <Text style={styles.label}>Service Type</Text>
-      <View style={styles.chips}>
-        {serviceTypes.map((type) => {
-          const active = form.serviceType === type;
-          return (
-            <Pressable
-              key={type}
-              onPress={() => update('serviceType', type)}
-              style={[styles.chip, active && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {type}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {showsMenu ? (
+        <>
+          <QuoteMenuSelect
+            selections={selections}
+            guestCount={form.guestCount}
+            onChange={setSelections}
+          />
+          <Field
+            label="Special Requests"
+            value={form.specialRequests}
+            onChangeText={(v) => update('specialRequests', v)}
+            multiline
+            placeholder="Allergies, substitutions, setup notes, or anything else we should know..."
+          />
+        </>
+      ) : null}
 
-      <QuoteMenuSelect
-        selections={selections}
-        guestCount={form.guestCount}
-        onChange={setSelections}
-      />
-
-      <Field
-        label="Special Requests"
-        value={form.specialRequests}
-        onChangeText={(v) => update('specialRequests', v)}
-        multiline
-        placeholder="Allergies, substitutions, setup notes, or anything else we should know..."
-      />
+      {isFullService ? (
+        <>
+          <Field
+            label="Meats & Sides *"
+            value={form.menuNotes}
+            onChangeText={(v) => update('menuNotes', v)}
+            multiline
+            placeholder="Tell us which meats and sides you’d like..."
+          />
+          <Text style={styles.followUp}>
+            We’ll reach out for additional info to build a full-service option
+            for your event.
+          </Text>
+        </>
+      ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -416,6 +461,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     color: '#FF6B6B',
     fontSize: 16,
+  },
+  followUp: {
+    fontFamily: fonts.body,
+    fontSize: 18,
+    lineHeight: 28,
+    color: colors.cream,
+    maxWidth: 640,
   },
   hint: {
     ...typography.caption,

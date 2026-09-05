@@ -20,6 +20,7 @@ export type QuotePayload = {
   }[];
   estimatedTotal: number;
   specialRequests: string;
+  menuNotes?: string;
   captchaToken: string;
 };
 
@@ -89,8 +90,12 @@ export async function sendQuoteRequest(payload: QuotePayload): Promise<void> {
       eventDate: payload.eventDate,
       guestCount: payload.guestCount || 'Not provided',
       serviceType: payload.serviceType || 'Not specified',
-      estimatedTotal: formatUSD(payload.estimatedTotal),
+      estimatedTotal:
+        payload.serviceType === 'Full-Service Catering'
+          ? 'To be quoted'
+          : formatUSD(payload.estimatedTotal),
       specialRequests: payload.specialRequests || 'None',
+      menuNotes: payload.menuNotes || 'None',
       botcheck: false,
       'h-captcha-response': payload.captchaToken,
       message: [
@@ -101,11 +106,15 @@ export async function sendQuoteRequest(payload: QuotePayload): Promise<void> {
         `Guest Count: ${payload.guestCount || 'Not provided'}`,
         `Service Type: ${payload.serviceType || 'Not specified'}`,
         '',
-        'Menu selections:',
-        itemLines,
-        '',
-        `Estimated total: ${formatUSD(payload.estimatedTotal)}`,
-        `Special requests: ${payload.specialRequests || 'None'}`,
+        payload.serviceType === 'Full-Service Catering'
+          ? `Meats & sides requested:\n${payload.menuNotes || 'None'}\n\nWe’ll follow up to build a full-service quote.`
+          : [
+              'Menu selections:',
+              itemLines,
+              '',
+              `Estimated total: ${formatUSD(payload.estimatedTotal)}`,
+              `Special requests: ${payload.specialRequests || 'None'}`,
+            ].join('\n'),
       ].join('\n'),
     }),
   });
