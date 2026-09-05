@@ -67,6 +67,7 @@ export function QuoteForm() {
 
   const setServiceType = (type: (typeof serviceTypes)[number]) => {
     update('serviceType', type);
+    setError('');
     if (type === 'Full-Service Catering') {
       setSelections([]);
     }
@@ -247,7 +248,6 @@ export function QuoteForm() {
           value={form.phone}
           onChangeText={(v) => update('phone', formatPhoneInput(v))}
           keyboardType="phone-pad"
-          placeholder="713-377-6483"
           maxLength={12}
           style={styles.half}
         />
@@ -323,12 +323,13 @@ export function QuoteForm() {
       <CTAButton
         label={sending ? 'Sending…' : 'Submit Quote Request'}
         onPress={onSubmit}
-        disabled={sending}
+        disabled={sending || !form.serviceType}
         style={{ alignSelf: 'flex-start', marginTop: spacing.md }}
       />
       <Text style={styles.disclaimer}>
-        We’ll email you back using the details you provide. No account signup
-        required.
+        {!form.serviceType
+          ? 'Choose a service type to submit.'
+          : 'We’ll email you back using the details you provide. No account signup required.'}
       </Text>
     </View>
   );
