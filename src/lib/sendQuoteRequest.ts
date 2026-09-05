@@ -1,5 +1,6 @@
 import { contact } from '../data/contact';
 import { formatUSD, unitLabel, type MenuUnit } from '../data/quoteMenu';
+import { Platform } from 'react-native';
 
 export type QuotePayload = {
   name: string;
@@ -19,6 +20,7 @@ export type QuotePayload = {
   }[];
   estimatedTotal: number;
   specialRequests: string;
+  captchaToken: string;
 };
 
 type Web3FormsResponse = {
@@ -33,6 +35,9 @@ export async function sendQuoteRequest(payload: QuotePayload): Promise<void> {
     throw new Error(
       'Quote email isn’t set up yet. Add a Web3Forms access key to .env.local and reload the site.'
     );
+  }
+  if (Platform.OS === 'web' && !payload.captchaToken) {
+    throw new Error('Please complete the captcha before sending.');
   }
 
   const itemLines =
@@ -86,6 +91,8 @@ export async function sendQuoteRequest(payload: QuotePayload): Promise<void> {
       serviceType: payload.serviceType || 'Not specified',
       estimatedTotal: formatUSD(payload.estimatedTotal),
       specialRequests: payload.specialRequests || 'None',
+      botcheck: false,
+      'h-captcha-response': payload.captchaToken,
       message: [
         `Name: ${payload.name}`,
         `Email: ${payload.email}`,

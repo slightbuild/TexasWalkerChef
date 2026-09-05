@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -16,9 +17,11 @@ import {
   formatMMDDYYYY,
   validateEventDate,
 } from '../lib/eventDate';
+import { formatPhoneInput, isCompletePhone } from '../lib/phone';
 import { QuoteMenuSelect, selectionsToLines, type QuoteSelection } from './QuoteMenuSelect';
 import { packageChoicesComplete, PACKAGE_SMALL_MIN, quoteMenuItems } from '../data/quoteMenu';
 import { CTAButton } from './CTAButton';
+import { QuoteCaptcha } from './QuoteCaptcha';
 
 const serviceTypes = ['Pickup', 'Drop-Off Catering', 'Full-Service Catering'] as const;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -49,6 +52,9 @@ export function QuoteForm() {
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [honeypot, setHoneypot] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -61,6 +67,10 @@ export function QuoteForm() {
     }
     if (!emailPattern.test(form.email.trim())) {
       setError('Please enter a valid email address.');
+      return;
+    }
+    if (!isCompletePhone(form.phone)) {
+      setError('Please enter a 10-digit phone number.');
       return;
     }
     const dateError = validateEventDate(form.eventDate);
@@ -95,6 +105,14 @@ export function QuoteForm() {
       );
       return;
     }
+    if (honeypot.trim()) {
+      setSubmitted(true);
+      return;
+    }
+    if (Platform.OS === 'web' && !captchaToken) {
+      setError('Please complete the captcha before sending.');
+      return;
+    }
 
     const lines = selectionsToLines(selections, form.guestCount);
     const estimatedTotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
@@ -120,9 +138,12 @@ export function QuoteForm() {
         })),
         estimatedTotal,
         specialRequests: form.specialRequests.trim(),
+        captchaToken,
       });
       setSubmitted(true);
     } catch (err) {
+      setCaptchaResetKey((key) => key + 1);
+      setCaptchaToken('');
       setError(
         err instanceof Error
           ? err.message
@@ -149,6 +170,9 @@ export function QuoteForm() {
           onPress={() => {
             setForm(empty);
             setSelections([]);
+            setHoneypot('');
+            setCaptchaToken('');
+            setCaptchaResetKey((key) => key + 1);
             setSubmitted(false);
           }}
           style={{ marginTop: spacing.lg, alignSelf: 'flex-start' }}
@@ -159,6 +183,15 @@ export function QuoteForm() {
 
   return (
     <View style={styles.form}>
+      <TextInput
+        value={honeypot}
+        onChangeText={setHoneypot}
+        autoComplete="off"
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
+        style={styles.honeypot}
+        {...(Platform.OS === 'web' ? ({ tabIndex: -1 } as object) : null)}
+      />
       <Field label="Name *" value={form.name} onChangeText={(v) => update('name', v)} />
       <View style={styles.row}>
         <Field
@@ -172,8 +205,10 @@ export function QuoteForm() {
         <Field
           label="Phone *"
           value={form.phone}
-          onChangeText={(v) => update('phone', v)}
+          onChangeText={(v) => update('phone', formatPhoneInput(v))}
           keyboardType="phone-pad"
+          placeholder="713-377-6483"
+          maxLength={12}
           style={styles.half}
         />
       </View>
@@ -231,6 +266,14 @@ export function QuoteForm() {
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <View style={styles.captcha}>
+        <QuoteCaptcha
+          onVerify={setCaptchaToken}
+          onExpire={() => setCaptchaToken('')}
+          resetKey={captchaResetKey}
+        />
+      </View>
 
       <CTAButton
         label={sending ? 'Sending…' : 'Submit Quote Request'}
@@ -296,6 +339,18 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 900,
     gap: spacing.lg,
+    position: 'relative',
+  },
+  honeypot: {
+    position: 'absolute',
+    left: -10000,
+    height: 1,
+    width: 1,
+    opacity: 0,
+  },
+  captcha: {
+    alignSelf: 'flex-start',
+    minHeight: Platform.OS === 'web' ? 78 : 0,
   },
   row: {
     flexDirection: 'row',
