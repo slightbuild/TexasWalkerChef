@@ -14,6 +14,7 @@ import { fonts } from '../theme';
 import { contact, cateringMenuLinks, navLinks } from '../data/contact';
 import { Logo } from './Logo';
 import { CTAButton } from './CTAButton';
+import { FacebookIcon, InstagramIcon, TikTokIcon } from './SocialIcons';
 
 export function Nav() {
   const pathname = usePathname();
@@ -235,13 +236,31 @@ export function Footer() {
 
         <View style={styles.footerCol}>
           <Text style={styles.footerHeading}>Social</Text>
-          <Pressable onPress={() => open(contact.facebook.url)}>
+          <Pressable
+            onPress={() => open(contact.facebook.url)}
+            style={styles.footerSocial}
+            accessibilityRole="link"
+            accessibilityLabel="Facebook"
+          >
+            <FacebookIcon size={18} color={colors.orange} />
             <Text style={styles.footerLink}>Facebook</Text>
           </Pressable>
-          <Pressable onPress={() => open(contact.instagram.url)}>
+          <Pressable
+            onPress={() => open(contact.instagram.url)}
+            style={styles.footerSocial}
+            accessibilityRole="link"
+            accessibilityLabel={`Instagram ${contact.instagram.label}`}
+          >
+            <InstagramIcon size={18} color={colors.orange} />
             <Text style={styles.footerLink}>{contact.instagram.label}</Text>
           </Pressable>
-          <Pressable onPress={() => open(contact.tiktok.url)}>
+          <Pressable
+            onPress={() => open(contact.tiktok.url)}
+            style={styles.footerSocial}
+            accessibilityRole="link"
+            accessibilityLabel={`TikTok ${contact.tiktok.label}`}
+          >
+            <TikTokIcon size={18} color={colors.orange} />
             <Text style={styles.footerLink}>{contact.tiktok.label}</Text>
           </Pressable>
         </View>
@@ -446,6 +465,11 @@ const styles = StyleSheet.create({
   footerCol: {
     minWidth: 180,
     gap: spacing.md,
+  },
+  footerSocial: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   footerHeading: {
     fontFamily: fonts.display,

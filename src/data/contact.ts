@@ -6,9 +6,11 @@ export const contact = {
   phoneTel: 'tel:7133776483',
   email: 'walkertexaschefllc@gmail.com',
   emailMailto: 'mailto:walkertexaschefllc@gmail.com',
+  /** Quote form test inbox. Delivery is tied to the Web3Forms access key. */
+  quoteInbox: 'torian.coleman41@gmail.com',
   facebook: {
     label: 'Walker Texas Chef',
-    url: 'https://www.facebook.com/search/top?q=Walker%20Texas%20Chef',
+    url: 'https://www.facebook.com/share/19Vvs6Qn3t/?mibextid=wwXIfr',
   },
   instagram: {
     label: '@walkertexaschef',

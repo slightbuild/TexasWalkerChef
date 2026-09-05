@@ -8,9 +8,20 @@ import {
 } from 'react-native';
 import { colors, layout, radii, spacing } from '../theme/colors';
 import { fonts, typography } from '../theme';
+import { contact } from '../data/contact';
+import { sendQuoteRequest } from '../lib/sendQuoteRequest';
+import {
+  earliestEventDate,
+  formatDateInput,
+  formatMMDDYYYY,
+  validateEventDate,
+} from '../lib/eventDate';
+import { QuoteMenuSelect, selectionsToLines, type QuoteSelection } from './QuoteMenuSelect';
+import { packageChoicesComplete, PACKAGE_SMALL_MIN, quoteMenuItems } from '../data/quoteMenu';
 import { CTAButton } from './CTAButton';
 
 const serviceTypes = ['Pickup', 'Drop-Off Catering', 'Full-Service Catering'] as const;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type FormState = {
   name: string;
@@ -19,7 +30,7 @@ type FormState = {
   eventDate: string;
   guestCount: string;
   serviceType: (typeof serviceTypes)[number] | '';
-  notes: string;
+  specialRequests: string;
 };
 
 const empty: FormState = {
@@ -29,25 +40,97 @@ const empty: FormState = {
   eventDate: '',
   guestCount: '',
   serviceType: '',
-  notes: '',
+  specialRequests: '',
 };
 
 export function QuoteForm() {
   const [form, setForm] = useState<FormState>(empty);
+  const [selections, setSelections] = useState<QuoteSelection[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const onSubmit = () => {
+  const onSubmit = async () => {
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
       setError('Please fill in your name, email, and phone.');
       return;
     }
+    if (!emailPattern.test(form.email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    const dateError = validateEventDate(form.eventDate);
+    if (dateError) {
+      setError(dateError);
+      return;
+    }
+    if (selections.length === 0) {
+      setError('Please add at least one menu item.');
+      return;
+    }
+    const incompletePackage = selections.find((selection) => {
+      const item = quoteMenuItems.find((entry) => entry.id === selection.id);
+      return item
+        ? !packageChoicesComplete(item, selection.meats, selection.sides)
+        : false;
+    });
+    if (incompletePackage) {
+      const item = quoteMenuItems.find((entry) => entry.id === incompletePackage.id);
+      setError(
+        `Choose all meats and sides for ${item?.name ?? 'your catering package'}.`
+      );
+      return;
+    }
+    const hasPackage = selections.some((selection) =>
+      quoteMenuItems.find((entry) => entry.id === selection.id)?.packageCounts
+    );
+    const guests = Number.parseInt(form.guestCount, 10) || 0;
+    if (hasPackage && guests < PACKAGE_SMALL_MIN) {
+      setError(
+        `Catering packages require a guest count of at least ${PACKAGE_SMALL_MIN}.`
+      );
+      return;
+    }
+
+    const lines = selectionsToLines(selections, form.guestCount);
+    const estimatedTotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+
     setError('');
-    setSubmitted(true);
+    setSending(true);
+    try {
+      await sendQuoteRequest({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        eventDate: form.eventDate.trim(),
+        guestCount: form.guestCount.trim(),
+        serviceType: form.serviceType,
+        items: lines.map((line) => ({
+          name: line.name,
+          quantity: line.quantity,
+          unit: line.unit,
+          lineTotal: line.lineTotal,
+          meats: line.meats.filter(Boolean),
+          sides: line.sides.filter(Boolean),
+          packageTier: line.packageTier,
+        })),
+        estimatedTotal,
+        specialRequests: form.specialRequests.trim(),
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not send your quote request. Please try again.'
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   if (submitted) {
@@ -55,16 +138,17 @@ export function QuoteForm() {
       <View style={styles.success}>
         <Text style={typography.h3}>Thanks — we got your request.</Text>
         <Text style={[typography.body, styles.successBody]}>
-          Your quote details are ready on this page. We’ll follow up soon to
-          build the right option for your event. For a faster reply, call{' '}
-          <Text style={styles.accent}>713-377-6483</Text> or email{' '}
-          <Text style={styles.accent}>walkertexaschefllc@gmail.com</Text>.
+          Your quote details were emailed to us. We’ll follow up soon to build
+          the right option for your event. For a faster reply, call{' '}
+          <Text style={styles.accent}>{contact.phone}</Text> or email{' '}
+          <Text style={styles.accent}>{contact.email}</Text>.
         </Text>
         <CTAButton
           label="Submit Another Request"
           variant="secondary"
           onPress={() => {
             setForm(empty);
+            setSelections([]);
             setSubmitted(false);
           }}
           style={{ marginTop: spacing.lg, alignSelf: 'flex-start' }}
@@ -82,6 +166,7 @@ export function QuoteForm() {
           value={form.email}
           onChangeText={(v) => update('email', v)}
           keyboardType="email-address"
+          autoCapitalize="none"
           style={styles.half}
         />
         <Field
@@ -94,17 +179,21 @@ export function QuoteForm() {
       </View>
       <View style={styles.row}>
         <Field
-          label="Event Date"
+          label="Event Date *"
           value={form.eventDate}
-          onChangeText={(v) => update('eventDate', v)}
+          onChangeText={(v) => update('eventDate', formatDateInput(v))}
           placeholder="MM/DD/YYYY"
+          keyboardType="number-pad"
+          hint={`Must be at least 2 weeks out. Earliest: ${formatMMDDYYYY(earliestEventDate())}`}
+          maxLength={10}
           style={styles.half}
         />
         <Field
-          label="Guest Count"
+          label="Guest Count *"
           value={form.guestCount}
-          onChangeText={(v) => update('guestCount', v)}
+          onChangeText={(v) => update('guestCount', v.replace(/\D/g, ''))}
           keyboardType="number-pad"
+          hint="Required for catering packages. 10–24 guests use the higher per-person rate; 25+ guests use volume pricing."
           style={styles.half}
         />
       </View>
@@ -127,24 +216,31 @@ export function QuoteForm() {
         })}
       </View>
 
+      <QuoteMenuSelect
+        selections={selections}
+        guestCount={form.guestCount}
+        onChange={setSelections}
+      />
+
       <Field
-        label="Notes / Menu Preferences"
-        value={form.notes}
-        onChangeText={(v) => update('notes', v)}
+        label="Special Requests"
+        value={form.specialRequests}
+        onChangeText={(v) => update('specialRequests', v)}
         multiline
-        placeholder="Tell us about your event..."
+        placeholder="Allergies, substitutions, setup notes, or anything else we should know..."
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <CTAButton
-        label="Submit Quote Request"
+        label={sending ? 'Sending…' : 'Submit Quote Request'}
         onPress={onSubmit}
+        disabled={sending}
         style={{ alignSelf: 'flex-start', marginTop: spacing.md }}
       />
       <Text style={styles.disclaimer}>
-        Submissions stay on this page for now — no account signup required. We’ll
-        contact you using the details you provide.
+        We’ll email you back using the details you provide. No account signup
+        required.
       </Text>
     </View>
   );
@@ -157,6 +253,9 @@ type FieldProps = {
   placeholder?: string;
   multiline?: boolean;
   keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'number-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  hint?: string;
+  maxLength?: number;
   style?: object;
 };
 
@@ -167,6 +266,9 @@ function Field({
   placeholder,
   multiline,
   keyboardType = 'default',
+  autoCapitalize,
+  hint,
+  maxLength,
   style,
 }: FieldProps) {
   return (
@@ -179,8 +281,12 @@ function Field({
         placeholderTextColor={colors.textDim}
         multiline={multiline}
         keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={keyboardType !== 'email-address'}
+        maxLength={maxLength}
         style={[styles.input, multiline && styles.textarea]}
       />
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -188,7 +294,7 @@ function Field({
 const styles = StyleSheet.create({
   form: {
     width: '100%',
-    maxWidth: 820,
+    maxWidth: 900,
     gap: spacing.lg,
   },
   row: {
@@ -255,6 +361,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     color: '#FF6B6B',
     fontSize: 16,
+  },
+  hint: {
+    ...typography.caption,
   },
   disclaimer: {
     ...typography.caption,

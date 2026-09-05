@@ -16,8 +16,9 @@ export default function QuoteScreen() {
       />
       <Section>
         <Text style={[typography.bodyLarge, styles.intro]}>
-          Tell us about your event and we’ll help build a catering option that
-          fits — from small gatherings to full-service celebrations.
+          Tell us about your event, pick menu items, and we’ll help build a
+          catering option that fits — from small gatherings to full-service
+          celebrations.
         </Text>
         <QuoteForm />
       </Section>

@@ -16,6 +16,7 @@ type CTAButtonProps = {
   onPress?: () => void;
   variant?: Variant;
   style?: ViewStyle;
+  disabled?: boolean;
 };
 
 export function CTAButton({
@@ -24,6 +25,7 @@ export function CTAButton({
   onPress,
   variant = 'primary',
   style,
+  disabled = false,
 }: CTAButtonProps) {
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -38,7 +40,12 @@ export function CTAButton({
   const face = (
     <Animated.View
       style={[
-        StyleSheet.flatten([styles.base, styles[variant], style]),
+        StyleSheet.flatten([
+          styles.base,
+          styles[variant],
+          disabled && styles.disabled,
+          style,
+        ]),
         animatedStyle,
       ]}
     >
@@ -47,8 +54,9 @@ export function CTAButton({
   );
 
   const pressHandlers = {
-    onPress,
+    onPress: disabled ? undefined : onPress,
     onPressIn: () => {
+      if (disabled) return;
       scale.value = withSpring(0.97, { damping: 14 });
     },
     onPressOut: () => {
@@ -56,7 +64,7 @@ export function CTAButton({
     },
   };
 
-  if (href) {
+  if (href && !disabled) {
     return (
       <Link href={href as any} asChild>
         <Pressable {...pressHandlers} accessibilityRole="button">
@@ -67,7 +75,12 @@ export function CTAButton({
   }
 
   return (
-    <Pressable {...pressHandlers} accessibilityRole="button">
+    <Pressable
+      {...pressHandlers}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+    >
       {face}
     </Pressable>
   );
@@ -94,6 +107,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  disabled: {
+    opacity: 0.55,
   },
   label: {
     fontFamily: fonts.bodyBold,
